@@ -44,12 +44,18 @@ export default async function Command({ launchContext = {} }: LaunchProps<{ laun
     return;
   }
 
-  await crossLaunchCommand({
-    name: "recognize-text",
-    type: LaunchType.UserInitiated,
-    extensionName: "screenocr",
-    ownerOrAuthorName: "huzef44",
-  }).catch(async () => {
+  await crossLaunchCommand(
+    {
+      name: "recognize-text",
+      type: LaunchType.Background,
+      extensionName: "screenocr",
+      ownerOrAuthorName: "huzef44",
+    },
+    {
+      name: "translate",
+      type: LaunchType.UserInitiated,
+    },
+  ).catch(async () => {
     await open("raycast://extensions/huzef44/screenocr");
   });
 }

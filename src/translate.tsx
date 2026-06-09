@@ -2,7 +2,16 @@ import fs from "node:fs";
 import { DB_PATH, SQLITE_WASM_PATH } from "./constants";
 import { useEffect, useMemo, useState } from "react";
 import initSqlJs, { Database } from "sql.js";
-import { Action, ActionPanel, launchCommand, LaunchProps, LaunchType, List } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  launchCommand,
+  LaunchProps,
+  LaunchType,
+  List,
+  showToast,
+  Toast,
+} from "@raycast/api";
 import { normalizeKana } from "./utils";
 import { isJapanese, isKana } from "wanakana";
 import { searchEnglish, searchKana, searchKanji } from "./dictionary/search";
@@ -27,6 +36,8 @@ type FormattedKanjiItem = {
 
 type LaunchContext = {
   query?: string;
+  text?: string | null;
+  error?: string;
 };
 
 function isDbSetup() {
@@ -121,6 +132,10 @@ function simplifyPartOfSpeech(pos: string, db: Database) {
   return posMap[pos];
 }
 
+function getInitialQuery(launchContext?: LaunchContext, fallbackText?: string) {
+  return launchContext?.query ?? launchContext?.text?.trim() ?? fallbackText ?? "";
+}
+
 export default function Command({ launchContext, fallbackText }: LaunchProps<{ launchContext?: LaunchContext }>) {
   const [isSetup] = useState(isDbSetup);
   if (!isSetup) {
@@ -145,8 +160,26 @@ export default function Command({ launchContext, fallbackText }: LaunchProps<{ l
   }
 
   const [db, setDb] = useState<Database>();
-  const [query, setQuery] = useState(launchContext?.query ?? fallbackText ?? "");
+  const [query, setQuery] = useState(getInitialQuery(launchContext, fallbackText));
   const [showingDetail, setShowingDetail] = useState(false);
+
+  useEffect(() => {
+    if (launchContext?.error) {
+      void showToast({
+        style: Toast.Style.Failure,
+        title: "OCR failed",
+        message: launchContext.error,
+      });
+      return;
+    }
+
+    if (launchContext?.text === null || launchContext?.text?.trim() === "") {
+      void showToast({
+        style: Toast.Style.Failure,
+        title: "No text detected",
+      });
+    }
+  }, [launchContext?.error, launchContext?.text]);
 
   useEffect(() => {
     getDb().then((db) => setDb(db));
