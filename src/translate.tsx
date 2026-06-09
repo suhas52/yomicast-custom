@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { DB_PATH, SQLITE_WASM_PATH } from "./constants";
 import { useEffect, useMemo, useState } from "react";
 import initSqlJs, { Database } from "sql.js";
-import { Action, ActionPanel, launchCommand, LaunchType, List } from "@raycast/api";
+import { Action, ActionPanel, launchCommand, LaunchProps, LaunchType, List } from "@raycast/api";
 import { normalizeKana } from "./utils";
 import { isJapanese, isKana } from "wanakana";
 import { searchEnglish, searchKana, searchKanji } from "./dictionary/search";
@@ -23,6 +23,10 @@ type FormattedKanjiItem = {
   kanji?: string;
   definition?: string;
   detail: string;
+};
+
+type LaunchContext = {
+  query?: string;
 };
 
 function isDbSetup() {
@@ -117,7 +121,7 @@ function simplifyPartOfSpeech(pos: string, db: Database) {
   return posMap[pos];
 }
 
-export default function Command() {
+export default function Command({ launchContext, fallbackText }: LaunchProps<{ launchContext?: LaunchContext }>) {
   const [isSetup] = useState(isDbSetup);
   if (!isSetup) {
     return (
@@ -141,7 +145,7 @@ export default function Command() {
   }
 
   const [db, setDb] = useState<Database>();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(launchContext?.query ?? fallbackText ?? "");
   const [showingDetail, setShowingDetail] = useState(false);
 
   useEffect(() => {

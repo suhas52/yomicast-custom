@@ -22,6 +22,13 @@
       "mode": "view"
     },
     {
+      "name": "ocr-translate",
+      "title": "Translate Japanese from Screen",
+      "subtitle": "Yomicast",
+      "description": "Recognize text from the screen with ScreenOCR and open it in Yomicast.",
+      "mode": "no-view"
+    },
+    {
       "name": "update-dictionary",
       "title": "Update Dictionary",
       "subtitle": "Yomicast",
@@ -30,10 +37,14 @@
       "interval": "7d"
     }
   ],
+  "crossExtensions": [
+    "huzef44/screenocr"
+  ],
   "dependencies": {
     "@raycast/api": "^1.99.2",
     "@scriptin/jmdict-simplified-loader": "^3.6.1",
     "adm-zip": "^0.5.16",
+    "raycast-cross-extension": "^0.2.3",
     "sql.js": "1.13.0",
     "ts-dedent": "^2.2.0",
     "wanakana": "^5.3.1"
