@@ -1,4 +1,4 @@
-import { LaunchProps, LaunchType, launchCommand, open, showToast, Toast } from "@raycast/api";
+import { LaunchProps, LaunchType, launchCommand } from "@raycast/api";
 import { crossLaunchCommand } from "raycast-cross-extension";
 
 type OCRResult = {
@@ -10,21 +10,12 @@ export default async function Command({ launchContext = {} }: LaunchProps<{ laun
   const { text, error } = launchContext;
 
   if (error) {
-    await showToast({
-      style: Toast.Style.Failure,
-      title: "OCR failed",
-      message: error,
-    });
     return;
   }
 
   if (typeof text === "string") {
     const query = text.trim();
     if (!query) {
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "No text detected",
-      });
       return;
     }
 
@@ -37,10 +28,6 @@ export default async function Command({ launchContext = {} }: LaunchProps<{ laun
   }
 
   if (text === null) {
-    await showToast({
-      style: Toast.Style.Failure,
-      title: "No text detected",
-    });
     return;
   }
 
@@ -55,7 +42,5 @@ export default async function Command({ launchContext = {} }: LaunchProps<{ laun
       name: "translate",
       type: LaunchType.UserInitiated,
     },
-  ).catch(async () => {
-    await open("raycast://extensions/huzef44/screenocr");
-  });
+  ).catch(() => {});
 }
