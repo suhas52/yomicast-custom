@@ -10,7 +10,7 @@
     "japanese",
     "dictionary",
     "offline",
-    "jmdict",
+    "jitendex",
     "jisho"
   ],
   "commands": [
@@ -32,7 +32,7 @@
       "name": "update-dictionary",
       "title": "Update Dictionary",
       "subtitle": "Yomicast",
-      "description": "Update the dictionary with the latest JMDict definitions.",
+      "description": "Update the dictionary with the latest Jitendex definitions.",
       "mode": "no-view",
       "interval": "7d"
     }
@@ -42,7 +42,6 @@
   ],
   "dependencies": {
     "@raycast/api": "^1.99.2",
-    "@scriptin/jmdict-simplified-loader": "^3.6.1",
     "adm-zip": "^0.5.16",
     "raycast-cross-extension": "^0.2.3",
     "sql.js": "1.13.0",
@@ -51,7 +50,6 @@
   },
   "devDependencies": {
     "@raycast/eslint-config": "^2.0.4",
-    "@scriptin/jmdict-simplified-types": "^3.6.1",
     "@types/adm-zip": "^0.5.7",
     "@types/node": "22.13.10",
     "@types/react": "19.0.10",

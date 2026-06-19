@@ -1,5 +1,5 @@
-import { downloadFile, extractDictionary, getLatestDictionaryUrl } from "./dictionary/download";
-import { DOWNLOAD_PATH, DB_PATH, EXTRACT_PATH, SQLITE_WASM_PATH } from "./constants";
+import { downloadFile, getLatestDictionaryUrl } from "./dictionary/download";
+import { DOWNLOAD_PATH, DB_PATH, SQLITE_WASM_PATH } from "./constants";
 import { populateTables } from "./dictionary/populate";
 import { showToast, Toast } from "@raycast/api";
 import initSqlJs from "sql.js";
@@ -37,8 +37,8 @@ export default async function Command() {
     return;
   }
 
-  await downloadFile(dictionaryUrl, DOWNLOAD_PATH, toast, abortSignal);
-  await extractDictionary(DOWNLOAD_PATH, EXTRACT_PATH, toast, abortSignal);
+  const downloadedPath = await downloadFile(dictionaryUrl, DOWNLOAD_PATH, toast, abortSignal);
+  if (!downloadedPath || abortSignal.aborted) return;
 
   const wasmBinary = fs.readFileSync(SQLITE_WASM_PATH);
   const SQL = await initSqlJs({ wasmBinary });

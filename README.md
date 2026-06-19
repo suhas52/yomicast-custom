@@ -10,13 +10,13 @@ Yomicast is an offline Japanese-English dictionary that enables instant searches
 ### Acknowledgments
 
 - [**Ensk.is Raycast extension**](https://www.raycast.com/jokull/ensk-is) – Inspiration for the full-text search approach.
-- [**jmdict-simplified**](https://github.com/scriptin/jmdict-simplified) – JSON-structured version of JMDict.
+- [**Jitendex**](https://github.com/Jitendex/Jitendex) – Offline Japanese-English dictionary data.
 
 ## License
 
-### JMdict and JMnedict
+### Jitendex
 
-The original XML files - **JMdict.xml**, **JMdict_e.xml**, **JMdict_e_examp.xml**, and **JMnedict.xml** - are the property of the Electronic Dictionary Research and Development Group, and are used in conformance with the Group's [license](http://www.edrdg.org/edrdg/licence.html).  Project started in 1991 by Jim Breen.
+Jitendex is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) and incorporates data from JMdict and Tatoeba. Full attribution is included in the downloaded dictionary metadata.
 
 ### Translate Icon
 

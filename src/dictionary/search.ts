@@ -1,4 +1,4 @@
-import { JMdictWord } from "@scriptin/jmdict-simplified-types";
+import { DictionaryEntry } from "./types";
 import { BindParams, Database } from "sql.js";
 import { sql } from "../utils";
 
@@ -46,11 +46,11 @@ export function searchEnglish(db: Database, query: string) {
 
 function queryEntries(db: Database, sql: string, params?: BindParams) {
   const stmt = db.prepare(sql, params);
-  const results: JMdictWord[] = [];
+  const results: DictionaryEntry[] = [];
   while (stmt.step()) {
     const result = stmt.getAsObject();
     try {
-      const data = JSON.parse(result.data as string) as JMdictWord;
+      const data = JSON.parse(result.data as string) as DictionaryEntry;
       results.push(data);
     } catch (error) {
       console.error("Error parsing JSON:", error);

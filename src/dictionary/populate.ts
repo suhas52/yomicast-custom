@@ -1,9 +1,17 @@
-import { loadDictionary } from "@scriptin/jmdict-simplified-loader";
+import AdmZip from "adm-zip";
 import { Database } from "sql.js";
-import { EXTRACT_PATH } from "../constants";
+import { DOWNLOAD_PATH } from "../constants";
 import { Toast } from "@raycast/api";
+import { isKana } from "wanakana";
 import { normalizeKana, sql } from "../utils";
-import { JMdictWord } from "@scriptin/jmdict-simplified-types";
+import { parseTerm } from "./jitendex";
+import { YomitanTerm } from "./types";
+
+type JitendexIndex = {
+  revision: string;
+  title: string;
+  attribution?: string;
+};
 
 export function createTables(db: Database) {
   return db.run(sql`
@@ -50,117 +58,98 @@ export function createTables(db: Database) {
   `);
 }
 
-export function populateTables(db: Database, toast: Toast, abortSignal: AbortSignal) {
-  if (abortSignal.aborted) {
-    return false;
-  }
+export async function populateTables(db: Database, toast: Toast, abortSignal: AbortSignal) {
+  if (abortSignal.aborted) return false;
 
-  console.log("Creating database tables...");
-  createTables(db);
+  try {
+    console.log("Opening Jitendex archive...");
+    const zip = new AdmZip(DOWNLOAD_PATH);
+    const indexEntry = zip.getEntry("index.json");
+    if (!indexEntry) throw new Error("Jitendex archive has no index.json");
 
-  console.log("Populating dictionary...");
-  return new Promise<boolean>((resolve) => {
-    let count = 0;
-    const total = 212062;
+    const metadata = JSON.parse(indexEntry.getData().toString("utf8")) as JitendexIndex;
+    const banks = zip
+      .getEntries()
+      .filter((entry) => /^term_bank_\d+\.json$/.test(entry.entryName))
+      .sort((a, b) => bankNumber(a.entryName) - bankNumber(b.entryName));
+    if (banks.length === 0) throw new Error("Jitendex archive has no term banks");
 
-    // No need for rollback journal during initial population
+    console.log("Creating database tables...");
+    createTables(db);
     db.run("PRAGMA journal_mode = OFF;");
-
-    // Begin single transaction for all insertions
     db.run("BEGIN TRANSACTION;");
+    db.run(
+      sql`INSERT INTO metadata (key, value) VALUES ('version', :version), ('date', :date), ('title', :title), ('attribution', :attribution);`,
+      {
+        ":version": metadata.revision,
+        ":date": metadata.revision.split(".").slice(0, 3).join("-"),
+        ":title": metadata.title,
+        ":attribution": metadata.attribution ?? "",
+      },
+    );
+
     const entryStmt = db.prepare(
       sql`INSERT INTO entries (entry_id, data, common_forms_count, has_kanji) VALUES (:entry_id, :data, :common_forms_count, :has_kanji);`,
     );
     const kanjiStmt = db.prepare(sql`INSERT INTO kanji_index (kanji_text, entry_id) VALUES (:kanji_text, :entry_id);`);
     const kanaStmt = db.prepare(
-      sql`INSERT OR REPLACE INTO kana_index (kana_text, entry_id) VALUES (:kana_text, :entry_id);`,
+      sql`INSERT OR IGNORE INTO kana_index (kana_text, entry_id) VALUES (:kana_text, :entry_id);`,
     );
-    const glossFtsStmt = db.prepare(
+    const glossStmt = db.prepare(
       sql`INSERT INTO gloss_fts_index (entry_id, sense_idx, gloss_content) VALUES (:entry_id, :sense_idx, :gloss_content);`,
     );
 
-    const loader = loadDictionary("jmdict", EXTRACT_PATH).onMetadata((metadata) => {
-      db.run(sql`INSERT INTO metadata (key, value) VALUES ('version', :version), ('date', :date), ('tags', :tags);`, {
-        ":version": metadata.version,
-        ":date": metadata.dictDate,
-        ":tags": JSON.stringify(metadata.tags),
-      });
-    });
-    loader.onEntry((entry) => {
-      // Insert full entry data
-      entryStmt.run({
-        ":entry_id": entry.id,
-        ":data": JSON.stringify(entry),
-        ":common_forms_count": countCommonForms(entry),
-        ":has_kanji": Number(entry.kanji.length > 0),
-      });
+    let entryId = 0;
+    for (const [bankIndex, bank] of banks.entries()) {
+      if (abortSignal.aborted) {
+        db.run("ROLLBACK;");
+        return false;
+      }
 
-      // Insert kanji
-      entry.kanji.forEach((kanji) => {
-        kanjiStmt.run({
-          ":kanji_text": kanji.text,
-          ":entry_id": entry.id,
+      const terms = JSON.parse(bank.getData().toString("utf8")) as YomitanTerm[];
+      terms.forEach((term, termIndex) => {
+        const entry = parseTerm(term, bankIndex, termIndex);
+        entryId += 1;
+        entryStmt.run({
+          ":entry_id": entryId,
+          ":data": JSON.stringify(entry),
+          ":common_forms_count": Number(entry.score > 0),
+          ":has_kanji": Number(!isKana(entry.term)),
         });
-      });
 
-      // Insert normalized kana
-      entry.kana.forEach((kana) => {
-        kanaStmt.run({
-          ":kana_text": normalizeKana(kana.text),
-          ":entry_id": entry.id,
-        });
-      });
+        if (isKana(entry.term)) {
+          kanaStmt.run({ ":kana_text": normalizeKana(entry.term), ":entry_id": entryId });
+        } else {
+          kanjiStmt.run({ ":kanji_text": entry.term, ":entry_id": entryId });
+        }
+        kanaStmt.run({ ":kana_text": normalizeKana(entry.reading), ":entry_id": entryId });
 
-      // Insert glosses into FTS index
-      entry.sense.forEach((sense) => {
-        sense.gloss.forEach((gloss, senseIndex) => {
-          if (!gloss.text) return;
-          glossFtsStmt.run({
-            ":entry_id": entry.id,
-            ":sense_idx": senseIndex,
-            ":gloss_content": gloss.text,
+        entry.senses.forEach((sense, senseIndex) => {
+          sense.glosses.forEach((gloss) => {
+            glossStmt.run({ ":entry_id": entryId, ":sense_idx": senseIndex, ":gloss_content": gloss });
           });
         });
       });
 
-      count += 1;
-      if (count % 1000 === 0) {
-        toast.title = "Indexing database...";
-        toast.message = `Progress: ${Math.round((count / Math.max(total, count)) * 100)}%`;
-        toast.style = Toast.Style.Animated;
-      }
-    });
-    loader.onEnd(() => {
-      db.run("COMMIT;");
-      console.log(`Indexed ${count} entries.`);
-      console.log("Dictionary loaded successfully.");
-      resolve(true);
-    });
-    loader.parser.on("error", (error: unknown) => {
-      console.error("Failed to parse dictionary:", error);
-      resolve(false);
-    });
-    abortSignal.addEventListener(
-      "abort",
-      () => {
-        console.log("Aborting dictionary indexing...");
-        loader.parser.destroy();
-        db.close();
+      toast.title = "Indexing Jitendex...";
+      toast.message = `Progress: ${Math.round(((bankIndex + 1) / banks.length) * 100)}%`;
+      toast.style = Toast.Style.Animated;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
 
-        resolve(false);
-      },
-      { once: true },
-    );
-  });
+    entryStmt.free();
+    kanjiStmt.free();
+    kanaStmt.free();
+    glossStmt.free();
+    db.run("COMMIT;");
+    console.log(`Indexed ${entryId} Jitendex terms.`);
+    return true;
+  } catch (error) {
+    console.error("Failed to index Jitendex:", error);
+    return false;
+  }
 }
 
-function countCommonForms(entry: JMdictWord) {
-  let count = 0;
-  entry.kana.forEach((kana) => {
-    if (kana.common) count += 1;
-  });
-  entry.kanji.forEach((kanji) => {
-    if (kanji.common) count += 1;
-  });
-  return count;
+function bankNumber(name: string) {
+  return Number(name.match(/\d+/)?.[0] ?? 0);
 }

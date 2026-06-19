@@ -1,29 +1,19 @@
 import fs from "node:fs";
 import { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
-import { environment, Toast } from "@raycast/api";
-import { basename } from "node:path";
-import AdmZip from "adm-zip";
+import { Toast } from "@raycast/api";
 
-type Release = {
-  assets: Array<{
-    name: string;
-    browser_download_url: string;
-  }>;
+type JitendexManifest = {
+  downloadUrl: string;
 };
 
 export async function getLatestDictionaryUrl() {
   try {
-    const latestRelease = "https://api.github.com/repos/scriptin/jmdict-simplified/releases/latest";
-    const releaseRes = await fetch(latestRelease);
-    const releaseJson = (await releaseRes.json()) as Release;
-    const enWithExamplesAsset = releaseJson.assets.find(
-      (asset: { name: string }) => asset.name.startsWith("jmdict-examples-eng-") && asset.name.endsWith(".json.zip"),
-    );
-    if (!enWithExamplesAsset) {
-      throw new Error("No suitable dictionary asset found in the latest release");
-    }
-    return enWithExamplesAsset.browser_download_url;
+    const manifestRes = await fetch("https://jitendex.org/static/yomitan.json");
+    if (!manifestRes.ok) throw new Error(`Jitendex manifest returned ${manifestRes.status}`);
+    const manifest = (await manifestRes.json()) as JitendexManifest;
+    if (!manifest.downloadUrl) throw new Error("Jitendex manifest has no download URL");
+    return manifest.downloadUrl;
   } catch (error) {
     console.log("Failed to fetch latest dictionary:", error);
   }
@@ -70,27 +60,5 @@ export async function downloadFile(url: string, destination: string, toast: Toas
     toast.style = Toast.Style.Failure;
     toast.title = "Failed to download dictionary";
     toast.message = "Please try again later.";
-  }
-}
-
-export async function extractDictionary(zipPath: string, outputPath: string, toast: Toast, abortSignal: AbortSignal) {
-  if (abortSignal.aborted) {
-    console.log("Extraction cancelled by user");
-    return;
-  }
-
-  try {
-    console.log("Opening zip file:", zipPath);
-    const zip = new AdmZip(zipPath);
-    for (const entry of zip.getEntries()) {
-      if (!entry.name.endsWith(".json")) continue;
-      zip.extractEntryTo(entry.entryName, environment.supportPath, false, true, false, basename(outputPath));
-      break;
-    }
-  } catch (error) {
-    toast.style = Toast.Style.Failure;
-    toast.title = "Failed to extract dictionary";
-    toast.message = "Please try again later.";
-    console.error("Error extracting dictionary:", error);
   }
 }

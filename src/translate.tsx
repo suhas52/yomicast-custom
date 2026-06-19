@@ -6,16 +6,8 @@ import { Action, ActionPanel, closeMainWindow, launchCommand, LaunchProps, Launc
 import { normalizeKana } from "./utils";
 import { isJapanese, isKana } from "wanakana";
 import { searchEnglish, searchKana, searchKanji } from "./dictionary/search";
-import { JMdictSense, JMdictWord } from "@scriptin/jmdict-simplified-types";
+import { DictionaryEntry, DictionarySense } from "./dictionary/types";
 import dedent from "ts-dedent";
-
-type SenseWithExamples = JMdictSense & {
-  examples?: {
-    source: { type: string; value: string };
-    text: string;
-    sentences: { land: "jpn" | "eng"; text: string }[];
-  }[];
-};
 
 type FormattedKanjiItem = {
   id: string;
@@ -61,38 +53,38 @@ function search(db: Database, query: string) {
   return searchKanji(db, japaneseQuery);
 }
 
-function formatKanjiItem(item: JMdictWord, db: Database): FormattedKanjiItem {
-  const kanji = item.kanji.at(0)?.text;
-  const kana = item.kana.at(0)?.text || "No kana";
-  const definition = item.sense.at(0)?.gloss.at(0)?.text;
+function formatKanjiItem(item: DictionaryEntry): FormattedKanjiItem {
+  const kanji = item.term !== item.reading ? item.term : undefined;
+  const kana = item.reading;
+  const definition = item.senses.at(0)?.glosses.at(0);
 
   let glossCount = 0;
-  const formatGlosses = (sense: SenseWithExamples) => {
+  const formatGlosses = (sense: DictionarySense) => {
     const formattedGlosses = [];
-    for (const gloss of sense.gloss) {
+    for (const gloss of sense.glosses) {
       glossCount += 1;
-      formattedGlosses.push(`${glossCount}. ${gloss.text}`);
+      formattedGlosses.push(`${glossCount}. ${gloss}`);
     }
 
-    const example = sense.examples?.at(0)?.sentences.map(({ land, text }) => ({ land, text }));
+    const example = sense.example;
     return dedent`
       ${formattedGlosses.join("\n")}
-        > ${example?.find((s) => s.land === "jpn")?.text || ""}
+        > ${example?.japanese || ""}
         >
-        > ${example?.find((s) => s.land === "eng")?.text || ""}
+        > ${example?.english || ""}
     `;
   };
 
-  const formatSense = (sense: JMdictSense) => {
-    const pos = sense.partOfSpeech.map((pos) => simplifyPartOfSpeech(pos, db)).join(", ");
+  const formatSense = (sense: DictionarySense) => {
+    const pos = sense.partOfSpeech.join(", ");
 
     return dedent`
-      ##### ${pos}
+      ${pos ? `##### ${pos}` : ""}
       ${formatGlosses(sense)}
     `;
   };
 
-  const sensesMarkdown = item.sense.map(formatSense).join("\n\n");
+  const sensesMarkdown = item.senses.map(formatSense).join("\n\n");
 
   const detail = dedent`
     ## ${kanji || kana}
@@ -108,19 +100,6 @@ function formatKanjiItem(item: JMdictWord, db: Database): FormattedKanjiItem {
     definition,
     detail,
   };
-}
-
-function simplifyPartOfSpeech(pos: string, db: Database) {
-  const getPosMap = db.exec("SELECT value from metadata WHERE key = ? LIMIT 1", ["tags"]);
-  const posMap = JSON.parse((getPosMap.at(0)?.values.at(0)?.at(0) as string) ?? "{}");
-
-  // Override values where the database's are too verbose
-  switch (pos) {
-    case "n":
-      return "Noun";
-  }
-
-  return posMap[pos];
 }
 
 function getInitialQuery(launchContext?: LaunchContext, fallbackText?: string) {
@@ -174,7 +153,7 @@ export default function Command({ launchContext, fallbackText }: LaunchProps<{ l
     return res;
   }, [db, query]);
 
-  const formattedData = db ? results.map((item) => formatKanjiItem(item, db)) : [];
+  const formattedData = db ? results.map((item) => formatKanjiItem(item)) : [];
 
   return (
     <List
